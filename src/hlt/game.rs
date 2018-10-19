@@ -115,4 +115,9 @@ impl Game {
         }
         println!();
     }
+
+    pub fn turns_left(&self) -> usize {
+        let turns_left = self.constants.max_turns - self.turn_number;
+        turns_left
+    }
 }
