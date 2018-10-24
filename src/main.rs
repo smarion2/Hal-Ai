@@ -41,17 +41,19 @@ fn main() {
         let me = &game.players[game.my_id.0];
 
         let mut command_queue: Vec<Command> = Vec::new();
-        let shipyard = &me.shipyard;
-        game.log.borrow_mut().log(&format!("dropoff length {}.", shipyard.position.x));
+        let shipyard = &me.shipyard;        
         for ship_id in &me.ship_ids {
             let ship = &game.ships[ship_id];
             let id = ship_id.0;
             let halite = game.game_map.at_entity(ship).halite;
             if !ship_status.contains_key(&id) {
                 ship_status.insert(id, "exploring".to_string());
-            }
-            else if ship_status[&id] == "returning" {
+            } else if game.turns_left() <= game.game_map.height - 15 {
+                ship_status.insert(id, "rush_return".to_string());
+            } 
+            if ship_status[&id] == "returning" {
                 if &ship.position != &shipyard.position {
+                    game.log.borrow_mut().log(&format!("returning ship {}.", id));
                     let towards_dropoff = &game.game_map.naive_navigate(ship, &shipyard.position);
                     let command = ship.move_ship(*towards_dropoff);
                     command_queue.push(command);
@@ -60,18 +62,10 @@ fn main() {
                     ship_status.insert(id, "exploring".to_string());
                 };
             }
-            else if ship.halite >= game.constants.max_halite - 250 || game.turns_left() <= game.game_map.height {
-                ship_status.insert(id, "returning".to_string());
-            }
-
-            let command = if halite < 50 || ship.is_full() {
-                let random_direction = Direction::get_all_cardinals()[rng.gen_range(0, 4)];                
-                let safe_pos = &game.game_map.naive_navigate(ship, &ship.position.directional_offset(random_direction));
-                ship.move_ship(*safe_pos)                
-            } else if game.turns_left() <= game.game_map.height {
+            else if ship_status[&id] == "rush_return" {
                 let mut closest_drop = game.game_map.calculate_distance(&ship.position, &shipyard.position);
                 let mut closest_pos = shipyard.position;
-                for dropoff_id in &me.dropoff_ids {
+                for dropoff_id in &me.dropoff_ids {                    
                     let dropoff = &game.dropoffs[&dropoff_id];
                     let dropoff_distance = game.game_map.calculate_distance(&ship.position, &dropoff.position);
                     if closest_drop > dropoff_distance {
@@ -79,8 +73,22 @@ fn main() {
                         closest_pos = dropoff.position;
                     }
                 }
-                let towards_closest = &game.game_map.naive_navigate(&ship, &closest_pos);
-                ship.move_ship(*towards_closest)
+                let towards_closest = game.game_map.get_unsafe_moves(&ship.position, &closest_pos);
+                game.log.borrow_mut().log(&format!("unsafe moves {}.", towards_closest.len()));
+                for moves in towards_closest {
+                    let command = ship.move_ship(moves);
+                    command_queue.push(command);
+                    break;
+                }
+                continue;
+            } else if ship.halite >= game.constants.max_halite - 250 {
+                ship_status.insert(id, "returning".to_string());
+            }          
+
+            let command = if halite < 10 || ship.is_full() {
+                let random_direction = Direction::get_all_cardinals()[rng.gen_range(0, 4)];                
+                let safe_pos = &game.game_map.naive_navigate(ship, &ship.position.directional_offset(random_direction));
+                ship.move_ship(*safe_pos)                
             } else {
                 ship.stay_still()
             };
@@ -96,7 +104,6 @@ fn main() {
         {
             command_queue.push(me.shipyard.spawn());
         }
-
 
         Game::end_turn(&command_queue);
     }
