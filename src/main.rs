@@ -73,8 +73,7 @@ fn main() {
                         closest_pos = dropoff.position;
                     }
                 }
-                let towards_closest = game.game_map.get_unsafe_moves(&ship.position, &closest_pos);
-                game.log.borrow_mut().log(&format!("unsafe moves {}.", towards_closest.len()));
+                let towards_closest = game.game_map.get_unsafe_moves(&ship.position, &closest_pos);                
                 for moves in towards_closest {
                     let command = ship.move_ship(moves);
                     command_queue.push(command);
@@ -85,10 +84,20 @@ fn main() {
                 ship_status.insert(id, "returning".to_string());
             }          
 
-            let command = if halite < 10 || ship.is_full() {
-                let random_direction = Direction::get_all_cardinals()[rng.gen_range(0, 4)];                
-                let safe_pos = &game.game_map.naive_navigate(ship, &ship.position.directional_offset(random_direction));
-                ship.move_ship(*safe_pos)                
+            let command = if halite < 10 || ship.is_full() {                
+                let best_direction = game.game_map.most_halite_near_ship_direction(&ship.position);
+                match best_direction {
+                    Some(x) => {
+                        game.log.borrow_mut().log(&format!("best direction: {:?} found for ship {}.", best_direction, ship.id.0));
+                        let safe_pos = &game.game_map.naive_navigate(ship, &ship.position.directional_offset(x));
+                        ship.move_ship(*safe_pos)
+                    },
+                    None => {
+                        let random_direction = Direction::get_all_cardinals()[rng.gen_range(0, 4)];
+                        let safe_pos = &game.game_map.naive_navigate(ship, &ship.position.directional_offset(random_direction));
+                        ship.move_ship(*safe_pos)
+                    }
+                }
             } else {
                 ship.stay_still()
             };

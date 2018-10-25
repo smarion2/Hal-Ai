@@ -97,6 +97,29 @@ impl GameMap {
         Direction::Still
     }
 
+    pub fn most_halite_near_ship_direction(&mut self, position: &Position) -> Option<Direction> {     
+        let mut most_halite = 0;
+        let mut best_direction = Direction::Still;
+        let mut current_pos = position;
+        let mut best_cell = self.at_position(&position); 
+
+        for direction in Direction::get_all_cardinals() {
+            let target_pos = current_pos.directional_offset(direction);
+            let cell = self.at_position(&target_pos);
+            if !cell.is_occupied() && cell.halite > most_halite {
+                most_halite = cell.halite;
+                best_direction = direction;
+                best_cell = cell;
+            }
+        }
+        current_pos = &best_cell.position;
+        if most_halite > 10 {
+            Some(best_direction)
+        } else {
+            None
+        }
+    }
+
     pub fn update(&mut self, input: &mut Input) {
         for y in 0..self.height {
             for x in 0..self.width {
