@@ -120,6 +120,30 @@ impl GameMap {
         }
     }
 
+    pub fn move_towards_rich_halite(&mut self, position: &Position) -> Direction {
+        let mut best_direction = Direction::Still;
+        let mut lowest_distance = 0;
+        for direction in Direction::get_all_cardinals() {
+            let mut distance = 0;
+            let mut current_pos = *position;
+            let mut move_not_found = false;
+            while self.at_position(&current_pos).halite < 25 {
+                distance += 1;
+                current_pos = current_pos.directional_offset(direction);
+                let cell = self.at_position(&current_pos);
+                if (cell.is_occupied() && distance == 1) || distance > 10 {
+                    move_not_found = true;
+                    break;
+                }
+            }
+            if (lowest_distance == 0 || distance < lowest_distance) && !move_not_found {
+                lowest_distance = distance;
+                best_direction = direction;
+            }
+        }
+        best_direction
+    }
+
     pub fn update(&mut self, input: &mut Input) {
         for y in 0..self.height {
             for x in 0..self.width {

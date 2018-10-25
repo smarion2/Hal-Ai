@@ -4,6 +4,7 @@ halite
 docs
 replays
 target
+old-target
 *.hlt
 *.log
 *~

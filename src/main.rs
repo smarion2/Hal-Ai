@@ -32,7 +32,7 @@ fn main() {
     // At this point "game" variable is populated with initial map data.
     // This is a good place to do computationally expensive start-up pre-processing.
     // As soon as you call "ready" function below, the 2 second per turn timer will start.
-    Game::ready("smarion2");
+    Game::ready("smarion2-new");
     let mut ship_status = HashMap::new();
     game.log.borrow_mut().log(&format!("Successfully created bot! My Player ID is {}. Bot rng seed is {}.", game.my_id.0, rng_seed));
 
@@ -88,12 +88,13 @@ fn main() {
                 let best_direction = game.game_map.most_halite_near_ship_direction(&ship.position);
                 match best_direction {
                     Some(x) => {
-                        game.log.borrow_mut().log(&format!("best direction: {:?} found for ship {}.", best_direction, ship.id.0));
                         let safe_pos = &game.game_map.naive_navigate(ship, &ship.position.directional_offset(x));
                         ship.move_ship(*safe_pos)
                     },
                     None => {
-                        let random_direction = Direction::get_all_cardinals()[rng.gen_range(0, 4)];
+                        //let random_direction = Direction::get_all_cardinals()[rng.gen_range(0, 4)];
+                        let random_direction = game.game_map.move_towards_rich_halite(&ship.position);
+                        game.log.borrow_mut().log(&format!("best direction: {:?} found for ship {}.", random_direction, ship.id.0));
                         let safe_pos = &game.game_map.naive_navigate(ship, &ship.position.directional_offset(random_direction));
                         ship.move_ship(*safe_pos)
                     }
