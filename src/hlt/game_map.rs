@@ -6,6 +6,8 @@ use hlt::map_cell::Structure;
 use hlt::position::Position;
 use hlt::ship::Ship;
 use std::cmp::min;
+use std::collections::BinaryHeap;
+use std::cmp::Ordering;
 
 pub struct GameMap {
     pub width: usize,
@@ -100,8 +102,7 @@ impl GameMap {
     pub fn most_halite_near_ship_direction(&mut self, position: &Position) -> Option<Direction> {     
         let mut most_halite = 0;
         let mut best_direction = Direction::Still;
-        let mut current_pos = position;
-        let mut best_cell = self.at_position(&position); 
+        let current_pos = position;
 
         for direction in Direction::get_all_cardinals() {
             let target_pos = current_pos.directional_offset(direction);
@@ -109,10 +110,8 @@ impl GameMap {
             if !cell.is_occupied() && cell.halite > most_halite {
                 most_halite = cell.halite;
                 best_direction = direction;
-                best_cell = cell;
             }
-        }
-        current_pos = &best_cell.position;
+        }        
         if most_halite > 10 {
             Some(best_direction)
         } else {
@@ -142,6 +141,45 @@ impl GameMap {
             }
         }
         best_direction
+    }
+
+    pub fn find_suitable_dropoffs(&mut self) -> Vec<Position> {
+        let mut possible_dropoffs: Vec<Position> = Vec::new();
+        let mut heap = BinaryHeap::new();
+        let (num_of_dropoffs, zone_radius) = if self.width < 33 {
+            (2, 3i32)
+        } else if self.width < 50 {
+            (3, 4i32) 
+        } else if self.width < 70 {
+            (4, 5i32)
+        } else {
+            (5, 6i32)
+        };
+        for x in 0..self.width {
+            for y in 0..self.height {
+                let mut total_halite = 0;
+                for radx in -zone_radius..zone_radius {
+                    for rady in -zone_radius..zone_radius {
+                        let posx = x as i32 + radx;
+                        let posy = y as i32 + rady;
+                        let pos = Position { x: posx, y: posy };
+                        let norm_pos = self.normalize(&pos);
+                        total_halite += self.at_position(&norm_pos).halite;
+                    }
+                }
+                heap.push(HaliteScore { score: total_halite, x: x as i32, y: y as i32});
+            }
+        }
+        let mut i = 0;
+        while let Some(HaliteScore { score: _, x, y }) = heap.pop() {
+            possible_dropoffs.push(Position { x: x, y: y});
+            i += 1;
+            if i == num_of_dropoffs {
+                break;
+            }
+        }
+        
+        possible_dropoffs
     }
 
     pub fn update(&mut self, input: &mut Input) {
@@ -186,5 +224,25 @@ impl GameMap {
         }
 
         GameMap { width, height, cells }
+    }
+}
+
+#[derive(Eq, PartialEq)]
+struct HaliteScore {
+    score: usize,
+    x: i32,
+    y: i32
+}
+
+impl Ord for HaliteScore {
+    fn cmp(&self, other: &HaliteScore) -> Ordering {
+        self.score.cmp(&other.score)
+            .then_with(|| self.x.cmp(&other.x))
+    }
+}
+
+impl PartialOrd for HaliteScore {
+    fn partial_cmp(&self, other: &HaliteScore) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }

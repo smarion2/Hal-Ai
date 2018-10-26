@@ -1,11 +1,7 @@
 extern crate rand;
 
 use hlt::command::Command;
-use hlt::direction::Direction;
 use hlt::game::Game;
-use rand::Rng;
-use rand::SeedableRng;
-use rand::XorShiftRng;
 use std::env;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
@@ -20,13 +16,6 @@ fn main() {
     } else {
         SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
     };
-    let seed_bytes: Vec<u8> = (0..16).map(|x| ((rng_seed >> (x % 8)) & 0xFF) as u8).collect();
-    let mut rng: XorShiftRng = SeedableRng::from_seed([
-        seed_bytes[0], seed_bytes[1], seed_bytes[2], seed_bytes[3],
-        seed_bytes[4], seed_bytes[5], seed_bytes[6], seed_bytes[7],
-        seed_bytes[8], seed_bytes[9], seed_bytes[10], seed_bytes[11],
-        seed_bytes[12], seed_bytes[13], seed_bytes[14], seed_bytes[15]
-    ]);
 
     let mut game = Game::new();
     // At this point "game" variable is populated with initial map data.
@@ -35,13 +24,17 @@ fn main() {
     Game::ready("smarion2-new");
     let mut ship_status = HashMap::new();
     game.log.borrow_mut().log(&format!("Successfully created bot! My Player ID is {}. Bot rng seed is {}.", game.my_id.0, rng_seed));
-
+    let best_dropoffs = game.game_map.find_suitable_dropoffs();
+    for dropoff in &best_dropoffs {
+        game.log.borrow_mut().log(&format!("Best drop off found x:{} y:{}.", dropoff.x, dropoff.y));    
+    }
+    let mut building_dropoff = false;
     loop {
         game.update_frame();
         let me = &game.players[game.my_id.0];
 
         let mut command_queue: Vec<Command> = Vec::new();
-        let shipyard = &me.shipyard;        
+        let shipyard = &me.shipyard;  
         for ship_id in &me.ship_ids {
             let ship = &game.ships[ship_id];
             let id = ship_id.0;
@@ -52,9 +45,19 @@ fn main() {
                 ship_status.insert(id, "rush_return".to_string());
             } 
             if ship_status[&id] == "returning" {
-                if &ship.position != &shipyard.position {
+                let mut closest_drop = game.game_map.calculate_distance(&ship.position, &shipyard.position);
+                let mut closest_pos = shipyard.position;
+                for dropoff_id in &me.dropoff_ids {                    
+                    let dropoff = &game.dropoffs[&dropoff_id];
+                    let dropoff_distance = game.game_map.calculate_distance(&ship.position, &dropoff.position);
+                    if closest_drop > dropoff_distance {
+                        closest_drop = dropoff_distance;
+                        closest_pos = dropoff.position;
+                    }
+                }
+                if &ship.position != &closest_pos {
                     game.log.borrow_mut().log(&format!("returning ship {}.", id));
-                    let towards_dropoff = &game.game_map.naive_navigate(ship, &shipyard.position);
+                    let towards_dropoff = &game.game_map.naive_navigate(ship, &closest_pos);
                     let command = ship.move_ship(*towards_dropoff);
                     command_queue.push(command);
                     continue;
@@ -80,6 +83,25 @@ fn main() {
                     break;
                 }
                 continue;
+            } else if ship_status[&id].contains("dropoff") {
+                let drop_id = &ship_status[&id][7..];
+                let drop_pos = best_dropoffs[drop_id.parse::<usize>().unwrap()];
+                game.log.borrow_mut().log(&format!("ship turning into dropoff: {} for ship {}.", drop_id, id));
+                if &drop_pos != &ship.position {
+                    let towards_dropoff = &game.game_map.naive_navigate(ship, &drop_pos);
+                    let command = ship.move_ship(*towards_dropoff);
+                    command_queue.push(command);
+                } else {
+                    let command = if me.halite >= game.constants.dropoff_cost {
+                        building_dropoff = false;
+                        ship.make_dropoff()
+                    } else {
+                        ship.stay_still()
+                    };
+                    command_queue.push(command);
+                }
+                continue;
+
             } else if ship.halite >= game.constants.max_halite - 250 {
                 ship_status.insert(id, "returning".to_string());
             }          
@@ -91,8 +113,7 @@ fn main() {
                         let safe_pos = &game.game_map.naive_navigate(ship, &ship.position.directional_offset(x));
                         ship.move_ship(*safe_pos)
                     },
-                    None => {
-                        //let random_direction = Direction::get_all_cardinals()[rng.gen_range(0, 4)];
+                    None => {                        
                         let random_direction = game.game_map.move_towards_rich_halite(&ship.position);
                         game.log.borrow_mut().log(&format!("best direction: {:?} found for ship {}.", random_direction, ship.id.0));
                         let safe_pos = &game.game_map.naive_navigate(ship, &ship.position.directional_offset(random_direction));
@@ -107,10 +128,33 @@ fn main() {
 
         let shipyard_cell = game.game_map.at_entity(&me.shipyard);
 
-        if
-            game.turn_number <= 200 &&
-            me.halite >= game.constants.ship_cost &&
-            !shipyard_cell.is_occupied()
+        if game.turn_number == 60 //&&
+           //me.halite < game.constants.dropoff_cost
+        {
+            building_dropoff = true;
+            let mut best_ship = 0;
+            let mut best_dropoff = 0;
+            let mut min_distance = 0;
+            for ship_id in &me.ship_ids {
+                let ship = &game.ships[ship_id];
+                for i in 0..best_dropoffs.len() {
+                    let distance = game.game_map.calculate_distance(&ship.position, &best_dropoffs[i]);
+                    if  distance < min_distance ||
+                       min_distance == 0 {
+                           best_ship = ship.id.0;
+                           best_dropoff = i;
+                           min_distance = distance;
+                       }
+                }
+            }
+            game.log.borrow_mut().log(&format!("ship selected dropoff: {} found for ship {}.", best_dropoff, best_ship));
+            ship_status.insert(best_ship, "dropoff".to_string() + &best_dropoff.to_string());
+        }
+
+        if game.turn_number <= 200 &&
+           me.halite >= game.constants.ship_cost &&
+           !shipyard_cell.is_occupied() &&
+           !building_dropoff
         {
             command_queue.push(me.shipyard.spawn());
         }
