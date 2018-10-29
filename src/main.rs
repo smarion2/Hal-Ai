@@ -24,13 +24,13 @@ fn main() {
     Game::ready("smarion2-new");
     let mut ship_status = HashMap::new();
     game.log.borrow_mut().log(&format!("Successfully created bot! My Player ID is {}. Bot rng seed is {}.", game.my_id.0, rng_seed));
-    let best_dropoffs = game.game_map.find_suitable_dropoffs();
-    for dropoff in &best_dropoffs {
-        game.log.borrow_mut().log(&format!("Best drop off found x:{} y:{}.", dropoff.x, dropoff.y));    
-    }
+    let best_dropoff = game.game_map.find_suitable_dropoffs();
+    game.log.borrow_mut().log(&format!("Best drop off found x:{} y:{}.", best_dropoff.x, best_dropoff.y));    
+    
     let mut building_dropoff = false;
     loop {
         game.update_frame();
+        game.game_map.find_suitable_dropoffs();
         let me = &game.players[game.my_id.0];
 
         let mut command_queue: Vec<Command> = Vec::new();
@@ -87,7 +87,7 @@ fn main() {
                 let drop_id = &ship_status[&id][7..];
                 let drop_pos = best_dropoffs[drop_id.parse::<usize>().unwrap()];
                 game.log.borrow_mut().log(&format!("ship turning into dropoff: {} for ship {}.", drop_id, id));
-                if &drop_pos != &ship.position {
+                if &drop_pos != &ship.position && me.halite >= game.constants.dropoff_cost {
                     let towards_dropoff = &game.game_map.naive_navigate(ship, &drop_pos);
                     let command = ship.move_ship(*towards_dropoff);
                     command_queue.push(command);

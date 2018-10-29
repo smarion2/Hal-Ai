@@ -143,17 +143,16 @@ impl GameMap {
         best_direction
     }
 
-    pub fn find_suitable_dropoffs(&mut self) -> Vec<Position> {
-        let mut possible_dropoffs: Vec<Position> = Vec::new();
+    pub fn find_suitable_dropoffs(&mut self) -> Position {
         let mut heap = BinaryHeap::new();
-        let (num_of_dropoffs, zone_radius) = if self.width < 33 {
-            (2, 3i32)
+        let zone_radius = if self.width < 33 {
+            (3i32
         } else if self.width < 50 {
-            (3, 4i32) 
+            4i32)
         } else if self.width < 70 {
-            (4, 5i32)
+            5i32
         } else {
-            (5, 6i32)
+            6i32
         };
         for x in 0..self.width {
             for y in 0..self.height {
@@ -170,16 +169,9 @@ impl GameMap {
                 heap.push(HaliteScore { score: total_halite, x: x as i32, y: y as i32});
             }
         }
-        let mut i = 0;
-        while let Some(HaliteScore { score: _, x, y }) = heap.pop() {
-            possible_dropoffs.push(Position { x: x, y: y});
-            i += 1;
-            if i == num_of_dropoffs {
-                break;
-            }
-        }
-        
-        possible_dropoffs
+        let winner = heap.pop(); {
+      
+        Position { x: winner.x, y: winner.y }
     }
 
     pub fn update(&mut self, input: &mut Input) {
